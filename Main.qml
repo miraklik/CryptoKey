@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import CryptoKey
+import App.TOTP 1.0
 
 Window {
     id: window
@@ -28,6 +29,10 @@ Window {
     onSelectedEntryChanged: {
         detailPassVisible = false
         detailPassReal    = ""
+        if (selectedEntry && selectedEntry.hasTotp) {
+            var secret = dbManager.getTotpSecret(selectedEntry.id)
+            if (secret !== "") TotpHelper.generateCode(secret)
+        }
     }
 
     Component.onCompleted: {
@@ -250,7 +255,6 @@ Window {
                                 onTextChanged: loginError = false
                                 background: Rectangle { color: "transparent"; border.width: 0 }
                             }
-
                             Text {
                                 text: showMasterPass.checked ? "🙈" : "👁"
                                 font.pixelSize: 14; opacity: 0.4
@@ -625,7 +629,7 @@ Window {
                                 onClicked: {
                                     selectedIndex = index
                                     selectedEntry = modelData
-                                    detailPasswordVisible = false
+                                    detailPassVisible = false
                                 }
                             }
                         }
@@ -701,8 +705,6 @@ Window {
                         Layout.maximumWidth: 280
                     }
                 }
-
-                property bool detailPasswordVisible: false
 
                 ScrollView {
                     anchors.fill: parent
@@ -800,6 +802,7 @@ Window {
                                     }
                                 }
 
+
                                 RowLayout {
                                     Layout.fillWidth: true; spacing: 8
                                     visible: newPassField.text.length > 0
@@ -865,6 +868,46 @@ Window {
                                 }
                             }
 
+                            ColumnLayout { spacing: 6; Layout.fillWidth: true
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "Two-Factor Secret (TOTP)"; font.pixelSize: 11; font.weight: Font.Medium; color: "#475569"; font.letterSpacing: 0.5 }
+                                    Item { Layout.fillWidth: true }
+                                    Text {
+                                        text: "Optional"
+                                        font.pixelSize: 10; color: "#1e293b"
+                                        font.letterSpacing: 0.5
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true; height: 44; radius: 10; color: "#16161f"
+                                    border.color: newTotpField.activeFocus ? "#a855f7" : "#1e293b"; border.width: 1
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 12; spacing: 8
+                                        Text { text: "🔐"; font.pixelSize: 14; opacity: 0.5 }
+                                        TextField {
+                                            id: newTotpField; Layout.fillWidth: true
+                                            placeholderText: "BASE32 key from authenticator app"
+                                            color: "#e2e8f0"; font.pixelSize: 12
+                                            font.family: "Courier New"
+                                            placeholderTextColor: "#334155"
+                                            verticalAlignment: TextInput.AlignVCenter
+                                            onTextChanged: {
+                                                var clean = text.toUpperCase().replace(/\s/g, "")
+                                                if (clean !== text) { text = clean }
+                                            }
+                                            background: Rectangle { color: "transparent"; border.width: 0 }
+                                        }
+                                    }
+                                }
+                                Text {
+                                    text: "Find this key in your service's 2FA settings — look for \"Enter manually\" or \"Can't scan QR code\""
+                                    font.pixelSize: 10; color: "#334155"
+                                    wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                }
+                            }
+
                             Rectangle {
                                 Layout.fillWidth: true; height: 46; radius: 10
                                 color: saveNewHover.containsMouse ? "#2563eb" : "#3b82f6"
@@ -875,10 +918,11 @@ Window {
                                     hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (newServiceField.text === "" || newLoginField.text === "" || newPassField.text === "") return
-                                        dbManager.addData(newServiceField.text, newLoginField.text, newPassField.text)
+                                        dbManager.addData(newServiceField.text, newLoginField.text, newPassField.text, newTotpField.text)
                                         newServiceField.text = ""
                                         newLoginField.text   = ""
                                         newPassField.text    = ""
+                                        newTotpField.text    = ""
                                         selectedIndex = -1
                                     }
                                 }
@@ -1121,6 +1165,244 @@ Window {
                                     text: strengthInfo(detailPassReal).label
                                     font.pixelSize: 11; font.weight: Font.Medium
                                     color: strengthInfo(detailPassReal).color
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true; Layout.topMargin: 10
+                                height: totpDetailCol.implicitHeight + 24
+                                radius: 12; color: "#0f0c1a"
+                                border.color: selectedEntry && selectedEntry.hasTotp ? "#7c3aed" : "#1e293b"
+                                border.width: 1
+                                Behavior on border.color { ColorAnimation { duration: 300 } }
+
+                                property bool showAddTotp: false
+
+                                ColumnLayout {
+                                    id: totpDetailCol
+                                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
+                                    spacing: 10
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        RowLayout {
+                                            spacing: 8
+                                            Rectangle {
+                                                width: 24; height: 24; radius: 6
+                                                color: selectedEntry && selectedEntry.hasTotp ? "#4c1d95" : "#1e293b"
+                                                Behavior on color { ColorAnimation { duration: 300 } }
+                                                Text { anchors.centerIn: parent; text: "🔐"; font.pixelSize: 12 }
+                                            }
+                                            Text {
+                                                text: "Two-Factor Auth (TOTP)"
+                                                font.pixelSize: 12; font.weight: Font.Medium
+                                                color: selectedEntry && selectedEntry.hasTotp ? "#c4b5fd" : "#475569"
+                                                Behavior on color { ColorAnimation { duration: 300 } }
+                                            }
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Rectangle {
+                                            height: 24; width: editTotpLabel.implicitWidth + 16; radius: 6
+                                            color: editTotpHover.containsMouse ? "#4c1d95" : "transparent"
+                                            border.color: "#4c1d95"; border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                            Text {
+                                                id: editTotpLabel
+                                                anchors.centerIn: parent
+                                                text: selectedEntry && selectedEntry.hasTotp ? "Change" : "+ Add"
+                                                font.pixelSize: 10; color: "#a78bfa"
+                                            }
+                                            MouseArea {
+                                                id: editTotpHover; anchors.fill: parent
+                                                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                onClicked: parent.parent.parent.parent.showAddTotp = !parent.parent.parent.parent.showAddTotp
+                                            }
+                                        }
+                                    }
+
+                                    Loader {
+                                        Layout.fillWidth: true
+                                        visible: selectedEntry && selectedEntry.hasTotp
+                                        height: visible ? 140 : 0
+                                        active: visible
+
+                                        sourceComponent: Component {
+                                            Item {
+                                                width: parent ? parent.width : 0
+                                                height: 140
+
+                                                Component.onCompleted: {
+                                                    if (selectedEntry) {
+                                                        var secret = dbManager.getTotpSecret(selectedEntry.id)
+                                                        TotpHelper.generateCode(secret)
+                                                    }
+                                                }
+
+                                                Canvas {
+                                                    id: totpTimer
+                                                    width: 56; height: 56
+                                                    anchors.left: parent.left; anchors.verticalCenter: codeDisplay.verticalCenter
+                                                    property real progress: TotpHelper.timeLeft / 30.0
+
+                                                    onProgressChanged: requestPaint()
+                                                    onPaint: {
+                                                        var ctx = getContext("2d")
+                                                        ctx.reset()
+                                                        ctx.lineWidth = 4; ctx.lineCap = "round"
+                                                        var c = width / 2, r = width / 2 - 4
+                                                        ctx.strokeStyle = "#1e293b"
+                                                        ctx.beginPath(); ctx.arc(c, c, r, 0, Math.PI * 2); ctx.stroke()
+                                                        var t = TotpHelper.timeLeft / 30.0
+                                                        ctx.strokeStyle = t > 0.5 ? "#4ade80" : (t > 0.25 ? "#fb923c" : "#f87171")
+                                                        ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 8
+                                                        ctx.beginPath()
+                                                        ctx.arc(c, c, r, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * progress)
+                                                        ctx.stroke(); ctx.shadowBlur = 0
+                                                    }
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: TotpHelper.timeLeft
+                                                        font.pixelSize: 13; font.weight: Font.Bold
+                                                        color: TotpHelper.timeLeft > 10 ? "#e2e8f0" : "#f87171"
+                                                        Behavior on color { ColorAnimation { duration: 300 } }
+                                                    }
+                                                    Connections {
+                                                        target: TotpHelper
+                                                        function onTimeLeftChanged() { totpTimer.requestPaint() }
+                                                    }
+                                                }
+
+                                                ColumnLayout {
+                                                    id: codeDisplay
+                                                    anchors { left: totpTimer.right; leftMargin: 16; right: copyTotpBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                                                    spacing: 4
+                                                    Text {
+                                                        text: "ONE-TIME CODE"
+                                                        font.pixelSize: 9; font.letterSpacing: 2; font.weight: Font.Bold
+                                                        color: "#334155"
+                                                    }
+                                                    Text {
+                                                        id: totpCodeText
+                                                        text: {
+                                                            var c = TotpHelper.currentCode
+                                                            return c.length === 6 ? c.slice(0,3) + " " + c.slice(3) : c
+                                                        }
+                                                        font.pixelSize: 28; font.weight: Font.Bold
+                                                        font.family: "Courier New"; color: "#e2e8f0"
+                                                        NumberAnimation on opacity {
+                                                            id: totpFlash; from: 0.3; to: 1.0; duration: 400; running: false
+                                                        }
+                                                        Connections {
+                                                            target: TotpHelper
+                                                            function onCodeUpdated() { totpFlash.restart() }
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: "Refreshes in " + TotpHelper.timeLeft + "s"
+                                                        font.pixelSize: 10; color: "#334155"
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    id: copyTotpBtn
+                                                    width: 36; height: 36; radius: 9
+                                                    anchors.right: parent.right; anchors.verticalCenter: codeDisplay.verticalCenter
+                                                    property bool copied: false
+                                                    color: copyTotpHover.containsMouse ? "#4c1d95" : "#1e293b"
+                                                    border.color: "#7c3aed"; border.width: 1
+                                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: copyTotpBtn.copied ? "✓" : "📋"
+                                                        font.pixelSize: 14
+                                                        color: copyTotpBtn.copied ? "#a78bfa" : "#e2e8f0"
+                                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                                    }
+                                                    Timer { id: copyTotpTimer; interval: 1500; onTriggered: copyTotpBtn.copied = false }
+                                                    MouseArea {
+                                                        id: copyTotpHover; anchors.fill: parent
+                                                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            clipHelper.copyText(TotpHelper.currentCode)
+                                                            copyTotpBtn.copied = true
+                                                            copyTotpTimer.restart()
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 8
+                                        visible: parent.parent.showAddTotp
+
+                                        Rectangle {
+                                            Layout.fillWidth: true; height: 1; color: "#1e293b"
+                                        }
+
+                                        Text {
+                                            text: "Paste the BASE32 key from your service's 2FA settings"
+                                            font.pixelSize: 10; color: "#475569"; wrapMode: Text.WordWrap
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Rectangle {
+                                            Layout.fillWidth: true; height: 44; radius: 10; color: "#16161f"
+                                            border.color: editTotpInput.activeFocus ? "#7c3aed" : "#1e293b"; border.width: 1
+                                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                                            RowLayout {
+                                                anchors.fill: parent; anchors.margins: 12; spacing: 8
+                                                Text { text: "🔑"; font.pixelSize: 13; opacity: 0.5 }
+                                                TextField {
+                                                    id: editTotpInput; Layout.fillWidth: true
+                                                    placeholderText: "e.g. JBSWY3DPEHPK3PXP"
+                                                    color: "#e2e8f0"; font.pixelSize: 12
+                                                    font.family: "Courier New"
+                                                    placeholderTextColor: "#334155"; verticalAlignment: TextInput.AlignVCenter
+                                                    onTextChanged: {
+                                                        var clean = text.toUpperCase().replace(/\s/g, "")
+                                                        if (clean !== text) text = clean
+                                                    }
+                                                    background: Rectangle { color: "transparent"; border.width: 0 }
+                                                }
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Rectangle {
+                                                height: 34; width: 120; radius: 8
+                                                color: saveTotpHover.containsMouse ? "#5b21b6" : "#4c1d95"
+                                                Behavior on color { ColorAnimation { duration: 150 } }
+                                                Text { anchors.centerIn: parent; text: "Save TOTP"; font.pixelSize: 12; font.weight: Font.Medium; color: "#e9d5ff" }
+                                                MouseArea {
+                                                    id: saveTotpHover; anchors.fill: parent
+                                                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (selectedEntry && editTotpInput.text !== "") {
+                                                            dbManager.updateTotpSecret(selectedEntry.id, editTotpInput.text)
+                                                            TotpHelper.generateCode(editTotpInput.text)
+                                                            editTotpInput.text = ""
+                                                            parent.parent.parent.parent.showAddTotp = false
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Rectangle {
+                                                height: 34; width: 80; radius: 8; color: "transparent"
+                                                border.color: "#1e293b"; border.width: 1
+                                                Text { anchors.centerIn: parent; text: "Cancel"; font.pixelSize: 12; color: "#475569" }
+                                                MouseArea {
+                                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        editTotpInput.text = ""
+                                                        parent.parent.parent.parent.showAddTotp = false
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 

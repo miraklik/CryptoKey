@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QtQml>
 #include <QString>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QtSql/QSqlDatabase>
 #include <QtSql/QSqlError>
 #include <QtSql/QSqlQuery>
@@ -20,7 +22,10 @@ public:
     Q_INVOKABLE bool    setMasterKey(const QString& password);
     Q_INVOKABLE QString verifyMasterKey(const QString& password);
 
-    Q_INVOKABLE void         addData(const QString& service, const QString& login, const QString& rawPass);
+    Q_INVOKABLE void         addData(const QString& service, const QString& login,
+                             const QString& rawPass, const QString& totpSecret = "");
+    Q_INVOKABLE bool         updateTotpSecret(int id, const QString& totpSecret);
+    Q_INVOKABLE QString      getTotpSecret(int id);
     Q_INVOKABLE QString      getDecryptedPassword(int id);
     Q_INVOKABLE QVariantList getEntriesList();
     Q_INVOKABLE void         removeData(int id);
@@ -35,6 +40,7 @@ private:
     QSqlDatabase db;
     QString      m_sessionKey;
 
+    void    migrateDatabase();
     QString hashPass(const QString& pass);
     QString encrypt (const QString& plainText,  const QString& key);
     QString decrypt (const QString& base64Text, const QString& key);

@@ -16,10 +16,11 @@ DatabaseManager::DatabaseManager(QObject *parent): QObject(parent){
 
     query.exec(
         "CREATE TABLE IF NOT EXISTS passwords ("
-        "id       INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "service  TEXT, "
-        "login    TEXT, "
-        "password TEXT)"
+        "id          INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "service     TEXT, "
+        "login       TEXT, "
+        "password    TEXT, "
+        "totp_secret TEXT DEFAULT '')"
         );
 
     query.exec(
@@ -28,10 +29,34 @@ DatabaseManager::DatabaseManager(QObject *parent): QObject(parent){
         "hash         TEXT NOT NULL, "
         "verification TEXT NOT NULL)"
         );
+
+    migrateDatabase();
 }
 
 DatabaseManager::~DatabaseManager() {
     if (db.isOpen()) db.close();
+}
+
+void DatabaseManager::migrateDatabase() {
+    QSqlQuery query(db);
+    bool hasColumn = false;
+
+    query.exec("PRAGMA table_info(passwords)");
+    while (query.next()) {
+        if (query.value(1).toString() == "totp_secret") {
+            hasColumn = true;
+            break;
+        }
+    }
+
+    if (!hasColumn) {
+        QSqlQuery alter(db);
+        if (alter.exec("ALTER TABLE passwords ADD COLUMN totp_secret TEXT DEFAULT ''")) {
+            qDebug() << "Migration: totp_secret column added.";
+        } else {
+            qDebug() << "Migration error:" << alter.lastError().text();
+        }
+    }
 }
 
 QString DatabaseManager::hashPass(const QString& pass) {
@@ -111,20 +136,57 @@ QString DatabaseManager::verifyMasterKey(const QString& password) {
     return "ok";
 }
 
-void DatabaseManager::addData(const QString& service, const QString& login, const QString& rawPass) {
-    QString encrypted = encrypt(rawPass, m_sessionKey);
+void DatabaseManager::addData(const QString& service, const QString& login,
+                              const QString& rawPass, const QString& totpSecret) {
+    QString encryptedPass = encrypt(rawPass, m_sessionKey);
+
+    QString encryptedTotp = totpSecret.isEmpty() ? "" : encrypt(totpSecret, m_sessionKey);
 
     QSqlQuery query(db);
     query.prepare(
-        "INSERT INTO passwords (service, login, password) "
-        "VALUES (:service, :login, :pass)"
+        "INSERT INTO passwords (service, login, password, totp_secret) "
+        "VALUES (:service, :login, :pass, :totp)"
         );
     query.bindValue(":service", service);
     query.bindValue(":login",   login);
-    query.bindValue(":pass",    encrypted);
-    query.exec();
+    query.bindValue(":pass",    encryptedPass);
+    query.bindValue(":totp",    encryptedTotp);
+
+    if (!query.exec()) {
+        qDebug() << "Insert error:" << query.lastError().text();
+        return;
+    }
 
     emit dataChanged();
+}
+
+bool DatabaseManager::updateTotpSecret(int id, const QString& totpSecret) {
+    QString encryptedTotp = totpSecret.isEmpty() ? "" : encrypt(totpSecret, m_sessionKey);
+
+    QSqlQuery query(db);
+    query.prepare("UPDATE passwords SET totp_secret = :totp WHERE id = :id");
+    query.bindValue(":totp", encryptedTotp);
+    query.bindValue(":id",   id);
+
+    if (!query.exec()) {
+        qDebug() << "UpdateTotp error:" << query.lastError().text();
+        return false;
+    }
+
+    emit dataChanged();
+    return true;
+}
+
+QString DatabaseManager::getTotpSecret(int id) {
+    QSqlQuery query(db);
+    query.prepare("SELECT totp_secret FROM passwords WHERE id = :id");
+    query.bindValue(":id", id);
+    if (query.exec() && query.next()) {
+        QString encrypted = query.value(0).toString();
+        if (encrypted.isEmpty()) return "";
+        return decrypt(encrypted, m_sessionKey);
+    }
+    return "";
 }
 
 QString DatabaseManager::getDecryptedPassword(int id) {
@@ -140,15 +202,19 @@ QString DatabaseManager::getDecryptedPassword(int id) {
 QVariantList DatabaseManager::getEntriesList() {
     QVariantList result;
     QSqlQuery query(db);
-    if (!query.exec("SELECT id, service, login FROM passwords ORDER BY id DESC")) {
+    if (!query.exec("SELECT id, service, login, "
+                    "CASE WHEN totp_secret != '' AND totp_secret IS NOT NULL "
+                    "     THEN 1 ELSE 0 END AS has_totp "
+                    "FROM passwords ORDER BY id DESC")) {
         qDebug() << "Select error:" << query.lastError().text();
         return result;
     }
     while (query.next()) {
         QVariantMap entry;
-        entry["id"]      = query.value(0).toInt();
-        entry["service"] = query.value(1).toString();
-        entry["login"]   = query.value(2).toString();
+        entry["id"]       = query.value(0).toInt();
+        entry["service"]  = query.value(1).toString();
+        entry["login"]    = query.value(2).toString();
+        entry["hasTotp"]  = query.value(3).toBool();
         result.append(entry);
     }
     return result;

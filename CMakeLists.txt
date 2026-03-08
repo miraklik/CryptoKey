@@ -24,6 +24,9 @@ qt_add_qml_module(appCryptoKey
         SOURCES
         SOURCES qaesencryption.h
         SOURCES qaesencryption.cpp
+        SOURCES totp.h
+        SOURCES totp.cpp
+        QML_FILES TotpDisplay.qml
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
