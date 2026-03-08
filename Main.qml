@@ -365,6 +365,119 @@ Window {
                                 isPassword: true
                             }
 
+                            // Password Strength Indicator & Generator
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 68
+                                radius: 12
+                                color: "#16161f"
+                                border.color: "#2a2a3a"
+                                border.width: 1
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 6
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        // Strength bar background
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            height: 6
+                                            radius: 3
+                                            color: "#0a0a0f"
+
+                                            Rectangle {
+                                                id: strengthBar
+                                                width: 0
+                                                height: parent.height
+                                                radius: parent.radius
+                                                color: "#ff4466"
+                                                Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
+                                                Behavior on color { ColorAnimation { duration: 300 } }
+                                            }
+                                        }
+
+                                        Text {
+                                            id: strengthText
+                                            text: "—"
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                            font.letterSpacing: 1
+                                            color: "#55556a"
+                                            Layout.minimumWidth: 50
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        spacing: 8
+                                        visible: passInput.fieldText.length > 0
+
+                                        Rectangle {
+                                            height: 28
+                                            width: generateBtn.implicitWidth + 16
+                                            radius: 8
+                                            color: generateMouse.containsMouse ? "#7c88ff" : "#7c88ff20"
+                                            border.color: "#7c88ff"
+                                            border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "🎲 Generate"
+                                                font.pixelSize: 11
+                                                font.letterSpacing: 1
+                                                color: generateMouse.containsMouse ? "#0a0a0f" : "#7c88ff"
+                                                Behavior on color { ColorAnimation { duration: 150 } }
+                                            }
+
+                                            MouseArea {
+                                                id: generateMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    passInput.fieldText = generatePassword(16)
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            height: 28
+                                            width: copyPassBtn.implicitWidth + 16
+                                            radius: 8
+                                            color: copyPassMouse.containsMouse ? "#00ff88" : "#00ff8820"
+                                            border.color: "#00ff88"
+                                            border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "📋 Copy"
+                                                font.pixelSize: 11
+                                                font.letterSpacing: 1
+                                                color: copyPassMouse.containsMouse ? "#0a0a0f" : "#00ff88"
+                                                Behavior on color { ColorAnimation { duration: 150 } }
+                                            }
+
+                                            MouseArea {
+                                                id: copyPassMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    Clipboard.copy(passInput.fieldText)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             Rectangle {
                                 Layout.fillWidth: true
                                 height: 48
@@ -691,6 +804,75 @@ Window {
                 color: "transparent"
                 border.width: 0
             }
+            onTextChanged: {
+                if (parent.parent.parent === passInput) {
+                    updateStrength(tf.text)
+                }
+            }
+        }
+    }
+
+    // Password strength calculation and visualization
+    function updateStrength(password) {
+        var length = password.length
+        var hasLower = /[a-z]/.test(password)
+        var hasUpper = /[A-Z]/.test(password)
+        var hasDigit = /[0-9]/.test(password)
+        var hasSpecial = /[^a-zA-Z0-9]/.test(password)
+        
+        var score = 0
+        if (length >= 8) score += 1
+        if (length >= 12) score += 1
+        if (hasLower) score += 1
+        if (hasUpper) score += 1
+        if (hasDigit) score += 1
+        if (hasSpecial) score += 1
+        
+        var widthPercent = Math.min(100, score * 16.67)
+        var strengthColor = "#ff4466"
+        var strengthLabel = "Weak"
+        
+        if (score >= 5) {
+            strengthColor = "#00ff88"
+            strengthLabel = "Strong"
+        } else if (score >= 4) {
+            strengthColor = "#ffaa00"
+            strengthLabel = "Medium"
+        } else if (score >= 3) {
+            strengthColor = "#ffaa00"
+            strengthLabel = "Fair"
+        }
+        
+        if (length === 0) {
+            strengthBar.width = 0
+            strengthText.text = "—"
+            strengthText.color = "#55556a"
+        } else {
+            strengthBar.width = strengthBar.parent.width * (widthPercent / 100)
+            strengthBar.color = strengthColor
+            strengthText.text = strengthLabel
+            strengthText.color = strengthColor
+        }
+    }
+
+    // Secure password generator
+    function generatePassword(length) {
+        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?"
+        var password = ""
+        for (var i = 0; i < length; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length))
+        }
+        updateStrength(password)
+        return password
+    }
+
+    // Clipboard helper
+    QtObject {
+        id: Clipboard
+        function copy(text) {
+            Qt.inputMethod.commit()
+            var clip = Qt.application.clipboard
+            clip.text = text
         }
     }
 }
