@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 import CryptoKey
 
 Window {
@@ -14,7 +13,13 @@ Window {
     DatabaseManager { id: dbManager }
     property bool isLoggedIn: false
     property bool loginError: false
+    property string loginErrorMsg: "Please enter your master password"
     property var entriesList: []
+    property bool masterKeySet: false
+
+    Component.onCompleted: {
+        masterKeySet = dbManager.isMasterKeySet()
+    }
 
     Connections {
         target: dbManager
@@ -23,52 +28,99 @@ Window {
         }
     }
 
+    TextEdit {
+        id: clipHelper
+        visible: false
+        function copyText(text) {
+            clipHelper.text = text
+            clipHelper.selectAll()
+            clipHelper.copy()
+            clipHelper.text = ""
+        }
+    }
+
+    function updateStrength(password) {
+        var length = password.length
+        var score = 0
+        if (length >= 8)  score++
+        if (length >= 12) score++
+        if (/[a-z]/.test(password))        score++
+        if (/[A-Z]/.test(password))        score++
+        if (/[0-9]/.test(password))        score++
+        if (/[^a-zA-Z0-9]/.test(password)) score++
+
+        if (length === 0) {
+            strengthBar.width  = 0
+            strengthText.text  = "—"
+            strengthText.color = "#55556a"
+            return
+        }
+        var pct   = Math.min(100, score * 16.67)
+        var col   = score >= 5 ? "#00ff88" : score >= 3 ? "#ffaa00" : "#ff4466"
+        var label = score >= 5 ? "Strong"  : score >= 3 ? "Medium"  : "Weak"
+        strengthBar.width  = strengthBarBg.width * (pct / 100)
+        strengthBar.color  = col
+        strengthText.text  = label
+        strengthText.color = col
+    }
+
+    function generatePassword(length) {
+        var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?"
+        var pwd = ""
+        for (var i = 0; i < length; i++)
+            pwd += chars.charAt(Math.floor(Math.random() * chars.length))
+        passInput.fieldText = pwd
+        updateStrength(pwd)
+    }
+
+    function doLogin() {
+        if (masterKeyField.text === "") {
+            loginErrorMsg = "Please enter your master password"
+            loginError = true
+            return
+        }
+        if (!masterKeySet) {
+            if (dbManager.setMasterKey(masterKeyField.text)) {
+                masterKeySet = true
+                entriesList  = dbManager.getEntriesList()
+                isLoggedIn   = true
+                loginError   = false
+            }
+        } else {
+            var result = dbManager.verifyMasterKey(masterKeyField.text)
+            if (result === "ok") {
+                entriesList = dbManager.getEntriesList()
+                isLoggedIn  = true
+                loginError  = false
+            } else {
+                loginErrorMsg = "Wrong master password"
+                loginError    = true
+            }
+        }
+    }
+
     Rectangle {
         id: root
         anchors.fill: parent
-        radius: 0
         color: "#0a0a0f"
         clip: true
 
         Rectangle {
-            width: 300; height: 300
-            x: -60; y: -60
-            radius: 150
-            color: "transparent"
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                color: "#1a0a3d"
-                opacity: 0.6
-            }
+            width: 300; height: 300; x: -60; y: -60; radius: 150; color: "transparent"
+            Rectangle { anchors.fill: parent; radius: parent.radius; color: "#1a0a3d"; opacity: 0.6 }
         }
         Rectangle {
-            width: 250; height: 250
-            x: parent.width - 160; y: parent.height - 180
-            radius: 125
-            color: "transparent"
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                color: "#0d2a1a"
-                opacity: 0.7
-            }
+            width: 250; height: 250; x: parent.width - 160; y: parent.height - 180; radius: 125; color: "transparent"
+            Rectangle { anchors.fill: parent; radius: parent.radius; color: "#0d2a1a"; opacity: 0.7 }
         }
-
         Canvas {
-            anchors.fill: parent
-            opacity: 0.04
+            anchors.fill: parent; opacity: 0.04
             onPaint: {
                 var ctx = getContext("2d")
-                ctx.strokeStyle = "#ffffff"
-                ctx.lineWidth = 0.5
+                ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 0.5
                 var step = 28
-                for (var x = 0; x < width; x += step) {
-                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke()
-                }
-                for (var y = 0; y < height; y += step) {
-                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
-                }
+                for (var x = 0; x < width; x += step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,height); ctx.stroke() }
+                for (var y = 0; y < height; y += step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(width,y); ctx.stroke() }
             }
         }
 
@@ -86,159 +138,78 @@ Window {
 
                 Item {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 72; height: 72
-                    Layout.bottomMargin: 28
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 18
-                        color: "transparent"
-                        border.color: "#00ff88"
-                        border.width: 1.5
-                        opacity: 0.4
-                        rotation: 45
-                    }
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 44; height: 44
-                        radius: 10
-                        color: "#00ff88"
-                        opacity: 0.12
-                        rotation: 45
-                    }
-                    Text {
-                        anchors.centerIn: parent
-                        text: "⬡"
-                        font.pixelSize: 32
-                        color: "#00ff88"
-                    }
+                    width: 72; height: 72; Layout.bottomMargin: 28
+                    Rectangle { anchors.fill: parent; radius: 18; color: "transparent"; border.color: "#00ff88"; border.width: 1.5; opacity: 0.4; rotation: 45 }
+                    Rectangle { anchors.centerIn: parent; width: 44; height: 44; radius: 10; color: "#00ff88"; opacity: 0.12; rotation: 45 }
+                    Text { anchors.centerIn: parent; text: "⬡"; font.pixelSize: 32; color: "#00ff88" }
                 }
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: "CRYPTOKEY"
-                    font.pixelSize: 26
-                    font.letterSpacing: 8
-                    font.weight: Font.Bold
-                    color: "#ffffff"
-                    Layout.bottomMargin: 4
+                    font.pixelSize: 26; font.letterSpacing: 8; font.weight: Font.Bold
+                    color: "#ffffff"; Layout.bottomMargin: 4
                 }
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "Secure Password Vault"
-                    font.pixelSize: 12
-                    font.letterSpacing: 2
-                    color: "#4a4a5a"
-                    Layout.bottomMargin: 40
+                    text: masterKeySet ? "Enter your master password" : "Create a master password"
+                    font.pixelSize: 12; font.letterSpacing: 2; color: "#4a4a5a"; Layout.bottomMargin: 40
                 }
 
                 Item {
-                    Layout.fillWidth: true
-                    height: 52
-                    Layout.bottomMargin: 12
-
+                    Layout.fillWidth: true; height: 52; Layout.bottomMargin: 12
                     Rectangle {
-                        anchors.fill: parent
-                        radius: 12
-                        color: "#16161f"
+                        anchors.fill: parent; radius: 12; color: "#16161f"
                         border.color: masterKeyField.activeFocus ? "#00ff88" : (loginError ? "#ff4466" : "#2a2a3a")
                         border.width: 1.5
                         Behavior on border.color { ColorAnimation { duration: 200 } }
                     }
-
-                    Text {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 16
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "🔑"
-                        font.pixelSize: 16
-                        opacity: 0.5
-                    }
-
+                    Text { anchors.left: parent.left; anchors.leftMargin: 16; anchors.verticalCenter: parent.verticalCenter; text: "🔑"; font.pixelSize: 16; opacity: 0.5 }
                     TextField {
                         id: masterKeyField
-                        anchors.fill: parent
-                        anchors.leftMargin: 44
-                        anchors.rightMargin: 8
+                        anchors.fill: parent; anchors.leftMargin: 44; anchors.rightMargin: 8
                         placeholderText: "Master password"
                         echoMode: TextInput.Password
-                        color: "#e8e8f0"
-                        font.pixelSize: 14
-                        font.letterSpacing: 1
-                        placeholderTextColor: "#55556a"
-                        verticalAlignment: TextInput.AlignVCenter
-                        Keys.onReturnPressed: loginBtn.clicked()
+                        color: "#e8e8f0"; font.pixelSize: 14; font.letterSpacing: 1
+                        placeholderTextColor: "#55556a"; verticalAlignment: TextInput.AlignVCenter
+                        Keys.onReturnPressed: doLogin()
                         onTextChanged: loginError = false
-                        background: Rectangle {
-                            color: "transparent"
-                            border.width: 0
-                        }
+                        background: Rectangle { color: "transparent"; border.width: 0 }
                     }
                 }
 
                 Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "Please enter your master password"
-                    font.pixelSize: 11
-                    color: "#ff4466"
-                    opacity: loginError ? 1 : 0
-                    Layout.bottomMargin: loginError ? 8 : 0
+                    Layout.alignment: Qt.AlignHCenter; text: loginErrorMsg
+                    font.pixelSize: 11; color: "#ff4466"
+                    opacity: loginError ? 1 : 0; Layout.bottomMargin: loginError ? 8 : 0
                     Behavior on opacity { NumberAnimation { duration: 200 } }
                 }
 
                 Rectangle {
                     id: loginBtn
-                    Layout.fillWidth: true
-                    height: 52
-                    radius: 12
+                    Layout.fillWidth: true; height: 52; radius: 12
                     color: loginBtnMouse.containsMouse ? "#00ff88" : "#00dd77"
                     Behavior on color { ColorAnimation { duration: 150 } }
-
-                    signal clicked()
-                    onClicked: {
-                        if (masterKeyField.text !== "") {
-                            dbManager.setMasterKey(masterKeyField.text)
-                            entriesList = dbManager.getEntriesList()
-                            isLoggedIn = true
-                            loginError = false
-                        } else {
-                            loginError = true
-                        }
-                    }
-
                     Text {
                         anchors.centerIn: parent
-                        text: "UNLOCK VAULT"
-                        font.pixelSize: 13
-                        font.weight: Font.Bold
-                        font.letterSpacing: 3
-                        color: "#0a0a0f"
+                        text: masterKeySet ? "UNLOCK VAULT" : "CREATE VAULT"
+                        font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 3; color: "#0a0a0f"
                     }
-
                     MouseArea {
                         id: loginBtnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: loginBtn.clicked()
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: doLogin()
                     }
-
                     Rectangle {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        color: "#000000"
+                        anchors.fill: parent; radius: parent.radius; color: "#000000"
                         opacity: loginBtnMouse.pressed ? 0.15 : 0
                         Behavior on opacity { NumberAnimation { duration: 80 } }
                     }
                 }
 
                 Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "AES-256 · End-to-end encrypted"
-                    font.pixelSize: 10
-                    font.letterSpacing: 1
-                    color: "#2a2a3a"
-                    Layout.topMargin: 24
+                    Layout.alignment: Qt.AlignHCenter; text: "AES-256 · End-to-end encrypted"
+                    font.pixelSize: 10; font.letterSpacing: 1; color: "#2a2a3a"; Layout.topMargin: 24
                 }
             }
         }
@@ -251,282 +222,195 @@ Window {
             Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.InOutQuad } }
 
             ScrollView {
-                anchors.fill: parent
-                contentWidth: availableWidth
+                anchors.fill: parent; contentWidth: availableWidth
                 ScrollBar.vertical.policy: ScrollBar.AsNeeded
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                 ColumnLayout {
-                    width: vaultScreen.width
-                    spacing: 0
+                    width: vaultScreen.width; spacing: 0
 
                     Rectangle {
-                        Layout.fillWidth: true
-                        height: 72
-                        color: "#ffffff04"
-
+                        Layout.fillWidth: true; height: 72; color: "#ffffff04"
                         RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 24
-                            anchors.rightMargin: 20
-
+                            anchors.fill: parent; anchors.leftMargin: 24; anchors.rightMargin: 20
                             ColumnLayout {
                                 spacing: 2
-                                Text {
-                                    text: "CRYPTOKEY"
-                                    font.pixelSize: 15
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: 4
-                                    color: "#ffffff"
-                                }
-                                Text {
-                                    text: "Password Vault"
-                                    font.pixelSize: 10
-                                    font.letterSpacing: 1
-                                    color: "#4a4a5a"
-                                }
+                                Text { text: "CRYPTOKEY"; font.pixelSize: 15; font.weight: Font.Bold; font.letterSpacing: 4; color: "#ffffff" }
+                                Text { text: "Password Vault"; font.pixelSize: 10; font.letterSpacing: 1; color: "#4a4a5a" }
                             }
-
                             Item { Layout.fillWidth: true }
-
                             Rectangle {
-                                width: 36; height: 36
-                                radius: 10
+                                width: 36; height: 36; radius: 10
                                 color: exitMouse.containsMouse ? "#ffffff10" : "#ffffff06"
                                 Behavior on color { ColorAnimation { duration: 150 } }
-
                                 Text {
-                                    anchors.centerIn: parent
-                                    text: "⏻"
-                                    font.pixelSize: 14
+                                    anchors.centerIn: parent; text: "⏻"; font.pixelSize: 14
                                     color: exitMouse.containsMouse ? "#ff4466" : "#4a4a5a"
                                     Behavior on color { ColorAnimation { duration: 150 } }
                                 }
-
                                 MouseArea {
                                     id: exitMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        isLoggedIn = false
-                                        masterKeyField.text = ""
-                                    }
+                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { isLoggedIn = false; masterKeyField.text = "" }
                                 }
                             }
                         }
-
-                        Rectangle {
-                            anchors.bottom: parent.bottom
-                            width: parent.width; height: 1
-                            color: "#ffffff0a"
-                        }
+                        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#ffffff0a" }
                     }
 
                     ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: 24
-                        spacing: 24
+                        Layout.fillWidth: true; Layout.margins: 24; spacing: 24
 
                         ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-
+                            Layout.fillWidth: true; spacing: 12
                             RowLayout {
-                                Text {
-                                    text: "NEW ENTRY"
-                                    font.pixelSize: 10
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: 3
-                                    color: "#00ff88"
-                                }
+                                Text { text: "NEW ENTRY"; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 3; color: "#00ff88" }
                                 Rectangle { Layout.fillWidth: true; height: 1; color: "#00ff8820" }
                             }
-
-                            ModernField {
-                                id: serviceInput
-                                Layout.fillWidth: true
-                                placeholder: "Resource / Website"
-                                icon: "🌐"
-                            }
-
-                            ModernField {
-                                id: loginInput
-                                Layout.fillWidth: true
-                                placeholder: "Login / Email"
-                                icon: "👤"
-                            }
-
+                            ModernField { id: serviceInput; Layout.fillWidth: true; placeholder: "Resource / Website"; icon: "🌐" }
+                            ModernField { id: loginInput;   Layout.fillWidth: true; placeholder: "Login / Email";      icon: "👤" }
                             ModernField {
                                 id: passInput
-                                Layout.fillWidth: true
-                                placeholder: "Password"
-                                icon: "🔒"
-                                isPassword: true
+                                Layout.fillWidth: true; placeholder: "Password"; icon: "🔒"; isPassword: true
+                                onFieldTextChanged: updateStrength(fieldText)
                             }
 
                             Rectangle {
-                                Layout.fillWidth: true
-                                height: 48
-                                radius: 12
-                                color: saveMouse.containsMouse ? "#00ff88" : "#00ff8820"
-                                border.color: "#00ff88"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 150 } }
-
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 8
-                                    Text {
-                                        text: "+"
-                                        font.pixelSize: 18
-                                        font.weight: Font.Light
-                                        color: saveMouse.containsMouse ? "#0a0a0f" : "#00ff88"
-                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                Layout.fillWidth: true; height: 68; radius: 12
+                                color: "#16161f"; border.color: "#2a2a3a"; border.width: 1
+                                ColumnLayout {
+                                    anchors.fill: parent; anchors.margins: 12; spacing: 6
+                                    RowLayout {
+                                        Layout.fillWidth: true; spacing: 8
+                                        Rectangle {
+                                            id: strengthBarBg
+                                            Layout.fillWidth: true; height: 6; radius: 3; color: "#0a0a0f"
+                                            Rectangle {
+                                                id: strengthBar
+                                                width: 0; height: parent.height; radius: parent.radius; color: "#ff4466"
+                                                Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
+                                                Behavior on color { ColorAnimation { duration: 300 } }
+                                            }
+                                        }
+                                        Text {
+                                            id: strengthText; text: "—"
+                                            font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 1
+                                            color: "#55556a"; Layout.minimumWidth: 50; horizontalAlignment: Text.AlignRight
+                                        }
                                     }
-                                    Text {
-                                        text: "ENCRYPT & SAVE"
-                                        font.pixelSize: 12
-                                        font.weight: Font.Bold
-                                        font.letterSpacing: 2
-                                        color: saveMouse.containsMouse ? "#0a0a0f" : "#00ff88"
-                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                    RowLayout {
+                                        spacing: 8
+                                        Rectangle {
+                                            height: 28; width: 110; radius: 8
+                                            color: generateMouse.containsMouse ? "#7c88ff" : "#7c88ff20"
+                                            border.color: "#7c88ff"; border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                            Text {
+                                                anchors.centerIn: parent; text: "🎲 Generate"
+                                                font.pixelSize: 11; font.letterSpacing: 1
+                                                color: generateMouse.containsMouse ? "#0a0a0f" : "#7c88ff"
+                                                Behavior on color { ColorAnimation { duration: 150 } }
+                                            }
+                                            MouseArea {
+                                                id: generateMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                onClicked: generatePassword(16)
+                                            }
+                                        }
+                                        Rectangle {
+                                            height: 28; width: 90; radius: 8
+                                            visible: passInput.fieldText.length > 0
+                                            color: copyPassMouse.containsMouse ? "#00ff88" : "#00ff8820"
+                                            border.color: "#00ff88"; border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                            Text {
+                                                anchors.centerIn: parent; text: "📋 Copy"
+                                                font.pixelSize: 11; font.letterSpacing: 1
+                                                color: copyPassMouse.containsMouse ? "#0a0a0f" : "#00ff88"
+                                                Behavior on color { ColorAnimation { duration: 150 } }
+                                            }
+                                            MouseArea {
+                                                id: copyPassMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                onClicked: clipHelper.copyText(passInput.fieldText)
+                                            }
+                                        }
                                     }
                                 }
+                            }
 
+                            Rectangle {
+                                Layout.fillWidth: true; height: 48; radius: 12
+                                color: saveMouse.containsMouse ? "#00ff88" : "#00ff8820"
+                                border.color: "#00ff88"; border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                RowLayout {
+                                    anchors.centerIn: parent; spacing: 8
+                                    Text { text: "+"; font.pixelSize: 18; font.weight: Font.Light; color: saveMouse.containsMouse ? "#0a0a0f" : "#00ff88"; Behavior on color { ColorAnimation { duration: 150 } } }
+                                    Text { text: "ENCRYPT & SAVE"; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2; color: saveMouse.containsMouse ? "#0a0a0f" : "#00ff88"; Behavior on color { ColorAnimation { duration: 150 } } }
+                                }
                                 MouseArea {
-                                    id: saveMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
+                                    id: saveMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        dbManager.addData(
-                                            serviceInput.fieldText,
-                                            loginInput.fieldText,
-                                            passInput.fieldText
-                                        )
-                                        serviceInput.clear()
-                                        loginInput.clear()
-                                        passInput.clear()
+                                        if (serviceInput.fieldText === "" || loginInput.fieldText === "" || passInput.fieldText === "") return
+                                        dbManager.addData(serviceInput.fieldText, loginInput.fieldText, passInput.fieldText)
+                                        serviceInput.clear(); loginInput.clear(); passInput.clear()
+                                        updateStrength("")
                                     }
                                 }
                             }
                         }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 1
-                            color: "#ffffff08"
-                        }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: "#ffffff08" }
 
                         ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
+                            Layout.fillWidth: true; spacing: 10
                             visible: entriesList.length > 0
-
                             RowLayout {
-                                Text {
-                                    text: "SAVED ENTRIES"
-                                    font.pixelSize: 10
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: 3
-                                    color: "#00ff88"
-                                }
+                                Text { text: "SAVED ENTRIES"; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 3; color: "#00ff88" }
                                 Rectangle { Layout.fillWidth: true; height: 1; color: "#00ff8820" }
-                                Text {
-                                    text: entriesList.length + " items"
-                                    font.pixelSize: 10
-                                    font.letterSpacing: 1
-                                    color: "#2a3a2a"
-                                }
+                                Text { text: entriesList.length + " items"; font.pixelSize: 10; font.letterSpacing: 1; color: "#2a3a2a" }
                             }
-
                             Repeater {
                                 model: entriesList
                                 delegate: Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 62
-                                    radius: 12
-                                    color: "#16161f"
-                                    border.color: "#00ff8825"
-                                    border.width: 1
-
+                                    Layout.fillWidth: true; height: 62; radius: 12
+                                    color: "#16161f"; border.color: "#00ff8825"; border.width: 1
                                     Rectangle {
-                                        width: 3
-                                        height: parent.height - 16
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 0
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        radius: 2
-                                        color: "#00ff88"
-                                        opacity: 0.7
+                                        width: 3; height: parent.height - 16
+                                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                        radius: 2; color: "#00ff88"; opacity: 0.7
                                     }
-
                                     RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 16
-                                        anchors.rightMargin: 12
-                                        spacing: 10
-
+                                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 12; spacing: 10
                                         Rectangle {
-                                            width: 28; height: 28
-                                            radius: 8
-                                            color: "#00ff8815"
-                                            border.color: "#00ff8840"
-                                            border.width: 1
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: modelData.id
-                                                font.pixelSize: 11
-                                                font.weight: Font.Bold
-                                                color: "#00ff88"
-                                            }
+                                            width: 28; height: 28; radius: 8; color: "#00ff8815"; border.color: "#00ff8840"; border.width: 1
+                                            Text { anchors.centerIn: parent; text: modelData.id; font.pixelSize: 11; font.weight: Font.Bold; color: "#00ff88" }
                                         }
-
                                         ColumnLayout {
-                                            spacing: 3
-                                            Layout.fillWidth: true
-
-                                            Text {
-                                                text: modelData.service
-                                                font.pixelSize: 13
-                                                font.weight: Font.Medium
-                                                color: "#e8e8f0"
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
-                                            Text {
-                                                text: modelData.login
-                                                font.pixelSize: 11
-                                                color: "#55556a"
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
+                                            spacing: 3; Layout.fillWidth: true
+                                            Text { text: modelData.service; font.pixelSize: 13; font.weight: Font.Medium; color: "#e8e8f0"; elide: Text.ElideRight; Layout.fillWidth: true }
+                                            Text { text: modelData.login;   font.pixelSize: 11; color: "#55556a"; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        }
+                                        Rectangle {
+                                            width: 28; height: 28; radius: 8
+                                            color: copyEntryMouse.containsMouse ? "#00ff8820" : "transparent"
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                            Text { anchors.centerIn: parent; text: "📋"; font.pixelSize: 11; opacity: copyEntryMouse.containsMouse ? 1.0 : 0.35; Behavior on opacity { NumberAnimation { duration: 150 } } }
+                                            MouseArea {
+                                                id: copyEntryMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    var pwd = dbManager.getDecryptedPassword(modelData.id)
+                                                    if (pwd !== "") clipHelper.copyText(pwd)
+                                                }
                                             }
                                         }
-
                                         Rectangle {
-                                            width: 28; height: 28
-                                            radius: 8
+                                            width: 28; height: 28; radius: 8
                                             color: delMouse.containsMouse ? "#ff446620" : "transparent"
                                             Behavior on color { ColorAnimation { duration: 150 } }
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "✕"
-                                                font.pixelSize: 11
-                                                color: delMouse.containsMouse ? "#ff4466" : "#2a2a3a"
-                                                Behavior on color { ColorAnimation { duration: 150 } }
-                                            }
-
+                                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; color: delMouse.containsMouse ? "#ff4466" : "#2a2a3a"; Behavior on color { ColorAnimation { duration: 150 } } }
                                             MouseArea {
-                                                id: delMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    dbManager.removeData(modelData.id)
-                                                }
+                                                id: delMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                onClicked: dbManager.removeData(modelData.id)
                                             }
                                         }
                                     }
@@ -534,100 +418,51 @@ Window {
                             }
                         }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
+                        Rectangle { Layout.fillWidth: true; height: 1; color: "#ffffff08" }
 
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 12
                             RowLayout {
-                                Text {
-                                    text: "DECRYPT"
-                                    font.pixelSize: 10
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: 3
-                                    color: "#7c88ff"
-                                }
+                                Text { text: "DECRYPT"; font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 3; color: "#7c88ff" }
                                 Rectangle { Layout.fillWidth: true; height: 1; color: "#7c88ff20" }
                             }
-
-                            ModernField {
-                                id: idField
-                                Layout.fillWidth: true
-                                placeholder: "Entry ID"
-                                icon: "#"
-                            }
-
+                            ModernField { id: idField; Layout.fillWidth: true; placeholder: "Entry ID"; icon: "#" }
                             Rectangle {
-                                Layout.fillWidth: true
-                                height: 56
-                                radius: 12
-                                color: "#16161f"
-                                border.color: resultLabel.text !== "—" ? "#7c88ff40" : "#ffffff08"
-                                border.width: 1
+                                Layout.fillWidth: true; height: 56; radius: 12; color: "#16161f"
+                                border.color: resultLabel.text !== "—" ? "#7c88ff40" : "#2a2a3a"; border.width: 1
                                 Behavior on border.color { ColorAnimation { duration: 300 } }
-
                                 RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 16
-                                    spacing: 12
-
+                                    anchors.fill: parent; anchors.margins: 16; spacing: 12
+                                    Text { text: "🔓"; font.pixelSize: 16; opacity: 0.5 }
                                     Text {
-                                        text: "🔓"
-                                        font.pixelSize: 16
-                                        opacity: 0.5
-                                    }
-                                    Text {
-                                        id: resultLabel
-                                        text: "—"
+                                        id: resultLabel; text: "—"
                                         color: resultLabel.text !== "—" ? "#c8ccff" : "#2a2a3a"
-                                        font.pixelSize: 13
-                                        font.letterSpacing: 0.5
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
+                                        font.pixelSize: 13; font.letterSpacing: 0.5; Layout.fillWidth: true; elide: Text.ElideRight
                                         Behavior on color { ColorAnimation { duration: 300 } }
                                     }
-
                                     Text {
-                                        text: "copy"
-                                        font.pixelSize: 10
-                                        font.letterSpacing: 1
-                                        color: "#7c88ff"
+                                        text: "copy"; font.pixelSize: 10; font.letterSpacing: 1; color: "#7c88ff"
                                         opacity: resultLabel.text !== "—" ? 0.7 : 0
                                         Behavior on opacity { NumberAnimation { duration: 200 } }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            onClicked: if (resultLabel.text !== "—") clipHelper.copyText(resultLabel.text)
+                                        }
                                     }
                                 }
                             }
-
                             Rectangle {
-                                Layout.fillWidth: true
-                                height: 48
-                                radius: 12
+                                Layout.fillWidth: true; height: 48; radius: 12
                                 color: decryptMouse.containsMouse ? "#7c88ff" : "#7c88ff20"
-                                border.color: "#7c88ff"
-                                border.width: 1
+                                border.color: "#7c88ff"; border.width: 1
                                 Behavior on color { ColorAnimation { duration: 150 } }
-
                                 RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 8
-                                    Text {
-                                        text: "🔓"
-                                        font.pixelSize: 14
-                                    }
-                                    Text {
-                                        text: "DECRYPT"
-                                        font.pixelSize: 12
-                                        font.weight: Font.Bold
-                                        font.letterSpacing: 2
-                                        color: decryptMouse.containsMouse ? "#0a0a0f" : "#7c88ff"
-                                        Behavior on color { ColorAnimation { duration: 150 } }
-                                    }
+                                    anchors.centerIn: parent; spacing: 8
+                                    Text { text: "🔓"; font.pixelSize: 14 }
+                                    Text { text: "DECRYPT"; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2; color: decryptMouse.containsMouse ? "#0a0a0f" : "#7c88ff"; Behavior on color { ColorAnimation { duration: 150 } } }
                                 }
-
                                 MouseArea {
-                                    id: decryptMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
+                                    id: decryptMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         var pwd = dbManager.getDecryptedPassword(parseInt(idField.fieldText))
                                         resultLabel.text = pwd !== "" ? pwd : "Not found"
@@ -637,12 +472,8 @@ Window {
                         }
 
                         Text {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: "AES-256 · Zero-knowledge"
-                            font.pixelSize: 10
-                            font.letterSpacing: 1
-                            color: "#1e1e2e"
-                            Layout.bottomMargin: 8
+                            Layout.alignment: Qt.AlignHCenter; text: "AES-256 · Zero-knowledge"
+                            font.pixelSize: 10; font.letterSpacing: 1; color: "#1e1e2e"; Layout.bottomMargin: 8
                         }
                     }
                 }
@@ -652,45 +483,30 @@ Window {
 
     component ModernField: Item {
         height: 48
-        property alias placeholder: tf.placeholderText
-        property string icon: ""
-        property bool isPassword: false
-        property alias fieldText: tf.text
+        property alias placeholder:  tf.placeholderText
+        property string icon:        ""
+        property bool   isPassword:  false
+        property alias  fieldText:   tf.text
         function clear() { tf.text = "" }
 
         Rectangle {
-            anchors.fill: parent
-            radius: 10
-            color: "#16161f"
+            anchors.fill: parent; radius: 10; color: "#16161f"
             border.color: tf.activeFocus ? (isPassword ? "#7c88ff" : "#00ff88") : "#2a2a3a"
             border.width: 1.5
             Behavior on border.color { ColorAnimation { duration: 200 } }
         }
-
         Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 14
+            anchors.left: parent.left; anchors.leftMargin: 14
             anchors.verticalCenter: parent.verticalCenter
-            text: icon
-            font.pixelSize: 14
-            opacity: 0.5
-            color: "#aaaacc"
+            text: icon; font.pixelSize: 14; opacity: 0.5; color: "#aaaacc"
         }
-
         TextField {
             id: tf
-            anchors.fill: parent
-            anchors.leftMargin: icon !== "" ? 40 : 14
-            anchors.rightMargin: 8
+            anchors.fill: parent; anchors.leftMargin: icon !== "" ? 40 : 14; anchors.rightMargin: 8
             echoMode: isPassword ? TextInput.Password : TextInput.Normal
-            color: "#e8e8f0"
-            font.pixelSize: 13
-            placeholderTextColor: "#55556a"
+            color: "#e8e8f0"; font.pixelSize: 13; placeholderTextColor: "#55556a"
             verticalAlignment: TextInput.AlignVCenter
-            background: Rectangle {
-                color: "transparent"
-                border.width: 0
-            }
+            background: Rectangle { color: "transparent"; border.width: 0 }
         }
     }
 }
