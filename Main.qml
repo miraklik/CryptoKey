@@ -80,6 +80,7 @@ Window {
             return
         }
         if (!masterKeySet) {
+            // Первый запуск — создаём мастер-пароль
             if (dbManager.setMasterKey(masterKeyField.text)) {
                 masterKeySet = true
                 entriesList  = dbManager.getEntriesList()
@@ -211,9 +212,192 @@ Window {
                     Layout.alignment: Qt.AlignHCenter; text: "AES-256 · End-to-end encrypted"
                     font.pixelSize: 10; font.letterSpacing: 1; color: "#2a2a3a"; Layout.topMargin: 24
                 }
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: !masterKeySet
+                    height: 36; width: 220; radius: 10; Layout.topMargin: 12
+                    color: genKeyMouse.containsMouse ? "#ffffff15" : "transparent"
+                    border.color: "#ffffff20"; border.width: 1
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    RowLayout {
+                        anchors.centerIn: parent; spacing: 6
+                        Text { text: "🎲"; font.pixelSize: 13 }
+                        Text {
+                            text: "Generate master key"
+                            font.pixelSize: 11; font.letterSpacing: 1; color: "#6a6a8a"
+                        }
+                    }
+                    MouseArea {
+                        id: genKeyMouse
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+                            var pwd = ""
+                            for (var i = 0; i < 20; i++)
+                                pwd += chars.charAt(Math.floor(Math.random() * chars.length))
+                            generatedKeyText.text = pwd
+                            masterKeyField.text   = pwd
+                            saveKeyModal.visible  = true
+                        }
+                    }
+                }
             }
         }
 
+        Rectangle {
+            id: saveKeyModal
+            anchors.fill: parent
+            visible: false
+            color: "#000000cc"
+            z: 100
+
+            MouseArea { anchors.fill: parent }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: parent.width * 0.85; radius: 20
+                color: "#13131e"
+                border.color: "#ffaa00"; border.width: 1.5
+                height: modalContent.implicitHeight + 48
+
+                ColumnLayout {
+                    id: modalContent
+                    anchors.centerIn: parent
+                    width: parent.width - 48
+                    spacing: 16
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "⚠️"; font.pixelSize: 36
+                        Layout.topMargin: 8
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "SAVE YOUR MASTER KEY"
+                        font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 3
+                        color: "#ffaa00"
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "This key cannot be recovered if lost.\nWrite it down and store it safely."
+                        font.pixelSize: 12; color: "#6a6a8a"
+                        horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true; height: 56; radius: 12
+                        color: "#0a0a0f"; border.color: "#ffaa0040"; border.width: 1
+
+                        RowLayout {
+                            anchors.fill: parent; anchors.margins: 12; spacing: 8
+
+                            Text {
+                                id: generatedKeyText
+                                text: ""
+                                Layout.fillWidth: true
+                                font.pixelSize: 13; font.letterSpacing: 1
+                                color: "#ffe080"; wrapMode: Text.WrapAnywhere
+                                font.family: "Courier New"
+                            }
+
+                            Rectangle {
+                                width: 32; height: 32; radius: 8
+                                color: copyKeyMouse.containsMouse ? "#ffaa0030" : "transparent"
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Text { anchors.centerIn: parent; text: "📋"; font.pixelSize: 14 }
+                                MouseArea {
+                                    id: copyKeyMouse
+                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: clipHelper.copyText(generatedKeyText.text)
+                                }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 10
+
+                        Rectangle {
+                            id: confirmCheck
+                            width: 20; height: 20; radius: 5
+                            color: confirmed ? "#ffaa00" : "transparent"
+                            border.color: confirmed ? "#ffaa00" : "#4a4a5a"; border.width: 1.5
+                            property bool confirmed: false
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            Text {
+                                anchors.centerIn: parent; text: "✓"
+                                font.pixelSize: 12; font.weight: Font.Bold; color: "#0a0a0f"
+                                opacity: confirmCheck.confirmed ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: confirmCheck.confirmed = !confirmCheck.confirmed
+                            }
+                        }
+
+                        Text {
+                            text: "I have saved my master key"
+                            font.pixelSize: 12; color: "#6a6a8a"; Layout.fillWidth: true
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: confirmCheck.confirmed = !confirmCheck.confirmed
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true; height: 46; radius: 12
+                        color: confirmCheck.confirmed
+                               ? (continueMouse.containsMouse ? "#ffaa00" : "#ffaa0090")
+                               : "#2a2a2a"
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "CONTINUE"
+                            font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 3
+                            color: confirmCheck.confirmed ? "#0a0a0f" : "#3a3a3a"
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+
+                        MouseArea {
+                            id: continueMouse
+                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (!confirmCheck.confirmed) return
+                                saveKeyModal.visible  = false
+                                confirmCheck.confirmed = false
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "Generate another"
+                        font.pixelSize: 11; font.letterSpacing: 1; color: "#3a3a5a"
+                        Layout.bottomMargin: 8
+                        MouseArea {
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+                                var pwd = ""
+                                for (var i = 0; i < 20; i++)
+                                    pwd += chars.charAt(Math.floor(Math.random() * chars.length))
+                                generatedKeyText.text = pwd
+                                masterKeyField.text   = pwd
+                                confirmCheck.confirmed = false
+                            }
+                        }
+                    }
+                }
+            }
+        }
         Item {
             id: vaultScreen
             anchors.fill: parent

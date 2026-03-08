@@ -16,24 +16,26 @@ public:
     explicit DatabaseManager(QObject *parent = nullptr);
     ~DatabaseManager();
 
-    Q_INVOKABLE bool setMasterKey(const QString& password);
-    Q_INVOKABLE void addData(const QString& service, const QString& login, const QString& rawPass);
-    Q_INVOKABLE QString getDecryptedPassword(int id);
+    Q_INVOKABLE bool    isMasterKeySet();
+    Q_INVOKABLE bool    setMasterKey(const QString& password);
+    Q_INVOKABLE QString verifyMasterKey(const QString& password);
+
+    Q_INVOKABLE void         addData(const QString& service, const QString& login, const QString& rawPass);
+    Q_INVOKABLE QString      getDecryptedPassword(int id);
     Q_INVOKABLE QVariantList getEntriesList();
+    Q_INVOKABLE void         removeData(int id);
+    Q_INVOKABLE void         get_data_list();
 
     bool connectToDB(const QString& dbPath);
-
-    Q_INVOKABLE void get_data_list();
-    Q_INVOKABLE void removeData(int id);
 
 signals:
     void dataChanged();
 
 private:
-    QString m_sessionKey;
     QSqlDatabase db;
+    QString      m_sessionKey;
 
     QString hashPass(const QString& pass);
-    QString encrypt(const QString& plainText, const QString& key);
-    QString decrypt(const QString& base64Text, const QString& key);
+    QString encrypt (const QString& plainText,  const QString& key);
+    QString decrypt (const QString& base64Text, const QString& key);
 };
