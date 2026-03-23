@@ -13,7 +13,6 @@ TotpGenerator::TotpGenerator(QObject *parent)
 void TotpGenerator::updateTimer() {
     qint64 now = QDateTime::currentSecsSinceEpoch();
     int step = 30;
-    int counter = now / step;
     m_timeLeft = step - (now % step);
 
     emit timeLeftChanged();
